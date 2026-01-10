@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <vector>
+VkInstance vkInstance;
 void NewSpaceLine() {
     std::cout << "\n===========================================================================\n";
 }
@@ -18,10 +19,14 @@ VkPhysicalDevice selectDevice(VkInstance *instance) {
 
     return devices[0];
 }
+class FirstApplication{
+public:
+private:
+
+};
 int main() {
     std::cout << "VulkanAPP info:";
     NewSpaceLine();
-    VkInstance vkInstance;
     //ИНФОРМАЦИЯ ДРАЙВЕРУ
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
