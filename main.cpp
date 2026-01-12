@@ -21,12 +21,56 @@ VkPhysicalDevice selectDevice(VkInstance *instance) {
 }
 class FirstApplication{
 public:
+    void run() {
+        initWindow();
+        initVulkan();
+        mainLoop();
+        cleanup();
+    }
+    void info() {
+        printAvailableExtencions();
+    }
 private:
+    void initWindow() {
 
+    }
+    void initVulkan() {
+
+    }
+    void mainLoop() {
+
+    }
+    void cleanup() {
+
+    }
+    #pragma region VulkanExtensions
+    struct ExtensionData {
+        std::vector<VkExtensionProperties> extensions;
+        uint32_t extensionCount;
+    };
+    ExtensionData getSupportedExtensions() {
+        uint32_t extensionCount = 0;
+        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+
+        std::vector<VkExtensionProperties> extensions(extensionCount);
+        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
+
+        return { std::move(extensions), extensionCount };
+    }
+    void printAvailableExtencions() {
+        std::vector<VkExtensionProperties> extensions = getSupportedExtensions().extensions;
+        std::cout << "Available extensions: \n";
+        for (const auto& extension : extensions) {
+            std::cout << extension.extensionName << std::endl;
+        }
+    }
+    #pragma endregion
 };
 int main() {
     std::cout << "VulkanAPP info:";
     NewSpaceLine();
+    FirstApplication app;
+    app.info();
     //ИНФОРМАЦИЯ ДРАЙВЕРУ
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -41,14 +85,6 @@ int main() {
     appInfo.apiVersion = VK_API_VERSION_1_4;
     createInfo.pApplicationInfo = &appInfo;
     //ИНФОРМАЦИЯ О РАСШИРЕНИЯХ ЭКЗЭМПЛЯРА
-    uint32_t extensionCount = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-    std::vector<VkExtensionProperties> extensions(extensionCount);
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
-    std::cout << "Available extensions: \n";
-    for (const auto& extension : extensions) {
-        std::cout << extension.extensionName << std::endl;
-    }
     //ИНФОРМАЦИЯ О РАСШИРЕНИЯХ УСТРОЙСТВА
     /*    uint32_t extensionDeviceCount = 0;
     vkEnumerateDeviceExtensionProperties(nullptr, &extensionDeviceCount, nullptr);//НУЖНО УСТРОЙСТВО(оставлю на потом)
@@ -69,7 +105,7 @@ int main() {
         std::cout << "Unable to create VKInstanceGLFW" << std::endl;
         return 1;
     }
-    else if(vkCreateInstance(&createInfo, nullptr, &vkInstanceGLFW) == VK_SUCCESS) {
+    else if (vkCreateInstance(&createInfo, nullptr, &vkInstanceGLFW) == VK_SUCCESS) {
         std::cout << "VKInstanceGLFW created" << std::endl;
     }
     NewSpaceLine();
@@ -101,7 +137,7 @@ int main() {
     std::vector<VkQueueFamilyProperties> families(familyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(AMD_RADEON_GRAPHICS, &familyCount, families.data());
     for (const auto& family : families) {
-        if (family.queueFlags && VK_QUEUE_COMPUTE_BIT)  {
+        if (family.queueFlags && VK_QUEUE_COMPUTE_BIT) {
             std::cout << "Queue count: " << family.queueCount << std::endl;
             std::cout << "Flags: " << std::hex << family.queueFlags << "\n\n";
         }
@@ -122,4 +158,6 @@ int main() {
     vkDestroyInstance(vkInstanceGLFW, nullptr);
     vkDestroyInstance(vkInstance, nullptr);
     return 0;
+
 }
+
