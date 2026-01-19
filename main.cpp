@@ -1,6 +1,7 @@
 ﻿#include <vulkan/vulkan.h>  // подключаем библиотеку Vulkan
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <optional>
 #include <vector>
 void NewSpaceLine() {
     std::cout << "\n===========================================================================\n";
@@ -42,6 +43,44 @@ private:
     void cleanup() {
 
     }
+#pragma region VulkanPhysicalDeviceQueues
+    struct QueueFamilyIndices {
+        std::optional<uint32_t> graphicsFamily;
+        bool isComplete() {
+            return graphicsFamily.has_value();
+        }
+    };
+    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
+        QueueFamilyIndices indices;
+        uint32_t familyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, nullptr);
+        std::vector<VkQueueFamilyProperties> families(familyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, families.data());
+        int i = 0;
+        for (const auto& family : families) {
+            if (family.queueFlags && VK_QUEUE_GRAPHICS_BIT) {
+                indices.graphicsFamily = i;
+            }
+            if (indices.isComplete()) {
+                break;
+            }
+            i++;
+        }
+        return indices;
+    }
+    void printQueueInfo(VkPhysicalDevice device) {
+        uint32_t familyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, nullptr);
+        std::vector<VkQueueFamilyProperties> families(familyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, families.data());
+        for (const auto& family : families) {
+            if (family.queueFlags && VK_QUEUE_COMPUTE_BIT) {
+                std::cout << "Queue count: " << family.queueCount << std::endl;
+                std::cout << "Flags: " << std::hex << family.queueFlags << "\n";
+            }
+        }
+    }
+#pragma endregion
 #pragma region VulkanPhysicalDevice
     void pickPhysicalDevice() {
         uint32_t deviceCount = 0;
@@ -60,12 +99,8 @@ private:
         }
     }
     bool isDeviceSuitable(VkPhysicalDevice device) {
-        VkPhysicalDeviceProperties deviceProperties;
-        VkPhysicalDeviceFeatures deviceFeatures;
-        vkGetPhysicalDeviceProperties(device, &deviceProperties);
-        vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-        return deviceFeatures.geometryShader && (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
-            || deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU);
+        QueueFamilyIndices indices = findQueueFamilies(device);
+        return indices.isComplete();
     }
     void printAvailableDevices() {
         VkPhysicalDeviceProperties deviceProperties;
@@ -78,6 +113,8 @@ private:
             vkGetPhysicalDeviceProperties(device, &deviceProperties);
             vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
             std::cout << deviceProperties.deviceName << '\n';
+            printQueueInfo(device);
+            std::cout << '\n';
         }
         NewSpaceLine();
     }
@@ -160,40 +197,6 @@ int main() {
     std::vector<VkExtensionProperties> extensionsDevice(extensionDeviceCount);
     vkEnumerateDeviceExtensionProperties(nulllptr, &extensionDeviceCount, extensionsDevice.data());
     */
-    //ИНФОРМАЦИЯ О ФИЗИЧЕСКИХ УСТРОЙСТВАХ
-    //uint32_t deviceCount = 0;
-    //vkEnumeratePhysicalDevices(vkInstance, &deviceCount, nullptr);//ПОЛУЧЕНИЕ КОЛИЧЕСТВА ФИЗИЧЕСКИХ УСТРОЙСТВ
-    //std::vector<VkPhysicalDevice> devices(deviceCount);
-    //vkEnumeratePhysicalDevices(vkInstance, &deviceCount, devices.data());
-    //VkPhysicalDeviceProperties deviceProperties;
-    //VkPhysicalDeviceFeatures deviceFeatures;
-    //VkPhysicalDevice AMD_RADEON_GRAPHICS = selectDevice(&vkInstance);
-    //for (const auto& device : devices) {
-    //    vkGetPhysicalDeviceProperties(device, &deviceProperties);
-    //    vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-    //    std::cout << deviceProperties.deviceName << std::endl;
-    //    std::cout << deviceCount << std::endl;
-    //    std::cout << "Support for geometry shader: " << (deviceFeatures.geometryShader ? "Yes" : "No") << std::endl;
-    //    std::cout << "Support for robust Buffer Access: " << (deviceFeatures.robustBufferAccess ? "Yes" : "No") << std::endl;
-    //    std::cout << "Support for image Cude Array: " << (deviceFeatures.imageCubeArray ? "Yes" : "No") << std::endl;
-    //    std::cout << "Support for discrete GPU: " << (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? "Yes" : "No") << std::endl;
-    //    std::cout << "Support for integrated GPU: " << (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ? "Yes" : "No") << std::endl;
-
-    //}
-    //NewSpaceLine();
-    //ИНФОРМАЦИЯ ОБ ОЧЕРЕДЯХ ФИЗИЧЕСКОГО УСТРОЙСТВА
-  /*  uint32_t familyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(AMD_RADEON_GRAPHICS, &familyCount, nullptr);
-    std::vector<VkQueueFamilyProperties> families(familyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(AMD_RADEON_GRAPHICS, &familyCount, families.data());
-    for (const auto& family : families) {
-        if (family.queueFlags && VK_QUEUE_COMPUTE_BIT) {
-            std::cout << "Queue count: " << family.queueCount << std::endl;
-            std::cout << "Flags: " << std::hex << family.queueFlags << "\n\n";
-        }
-    }
-    NewSpaceLine();
-    vkDestroyInstance(vkInstance, nullptr);*/
     return 0;
 
 }
