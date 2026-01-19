@@ -1,6 +1,7 @@
 ﻿#include <vulkan/vulkan.h>  // подключаем библиотеку Vulkan
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <string>
 #include <optional>
 #include <vector>
 void NewSpaceLine() {
@@ -15,6 +16,8 @@ public:
         cleanup();
     }
     void info() {
+        std::cout << "VulkanAPP info:";
+        NewSpaceLine();
         printAvailableExtensions();
         printAvailableDevices();
     }
@@ -143,11 +146,7 @@ private:
         createInfo.ppEnabledExtensionNames = glfwExtensions.data();
         VkResult vkResult = vkCreateInstance(&createInfo, nullptr, &vkInstance);
         if (vkResult != VK_SUCCESS) {
-            std::cout << "UWUPS :3 ERROR(~_~)\n";
-        }
-        if (vkResult == VK_SUCCESS) {
-            std::cout << "VKINSTANCE CREATED\n";
-            NewSpaceLine();
+            throw std::runtime_error("failed to create vkInstance! Error code: " + std::to_string(vkResult));
         }
     }
 #pragma endregion
@@ -186,12 +185,16 @@ private:
 #pragma endregion
 };
 int main() {
-    std::cout << "VulkanAPP info:";
-    NewSpaceLine();
     FirstApplication app;
-    app.run();
-    app.info();
-    return 0;
+    try {
+        app.run();
+    }
+    catch (const std::exception& e) {
+        std::cerr << "APPLICATION CRASHED: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 
 }
 
