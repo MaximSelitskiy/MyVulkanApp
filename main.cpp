@@ -191,12 +191,6 @@ int main() {
     FirstApplication app;
     app.run();
     app.info();
-    //ИНФОРМАЦИЯ О РАСШИРЕНИЯХ УСТРОЙСТВА
-    /*    uint32_t extensionDeviceCount = 0;
-    vkEnumerateDeviceExtensionProperties(nullptr, &extensionDeviceCount, nullptr);//НУЖНО УСТРОЙСТВО(оставлю на потом)
-    std::vector<VkExtensionProperties> extensionsDevice(extensionDeviceCount);
-    vkEnumerateDeviceExtensionProperties(nulllptr, &extensionDeviceCount, extensionsDevice.data());
-    */
     return 0;
 
 }
