@@ -14,6 +14,7 @@ public:
 	void run() {
 		initWindow();
 		initVulkan();
+		info();
 		mainLoop();
 		cleanup();
 	}
