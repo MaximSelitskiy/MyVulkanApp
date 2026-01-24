@@ -66,7 +66,27 @@ private:
 	}
 #pragma region VulkanLogicalDevice
 	void createLogicalDevice() {
+		QueueFamilyIndices index = findQueueFamilies(physicalDevice);
+		float queuePriority = 1.0;
+		VkDeviceQueueCreateInfo queueCreateInfo{};
+		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queueCreateInfo.queueFamilyIndex = index.graphicsFamily.value();
+		queueCreateInfo.queueCount = 1;
+		queueCreateInfo.pQueuePriorities = &queuePriority;
 
+		VkPhysicalDeviceFeatures deviceFeatures{};
+
+		VkDeviceCreateInfo deviceCreateInfo{};
+		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+		deviceCreateInfo.queueCreateInfoCount = 1;
+		deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
+		deviceCreateInfo.enabledExtensionCount = 0;
+		
+		if (vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device)) {
+			throw std::runtime_error("Couldn't create logical device");
+		}
+
+		vkGetDeviceQueue(device, index.graphicsFamily.value(), 0, &graphicsQueue);
 	}
 #pragma endregion
 #pragma region VulkanSurface
