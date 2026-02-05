@@ -1,6 +1,7 @@
 ﻿#include <vulkan/vulkan.h>  // подключаем библиотеку Vulkan
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <optional>
 #include <vector>
@@ -10,6 +11,18 @@
 #include <set>
 const uint32_t WIDTH = 350;
 const uint32_t HEIGHT = 250;
+static std::vector<char> readFile(const std::string& filename) {
+	std::ifstream file(filename, std::ios::ate | std::ios::binary);
+	if (!file.is_open()) {
+		throw std::runtime_error("couldn't open file");
+	}
+	size_t fileSize = static_cast<size_t>(file.tellg());
+	std::vector<char> buffer(fileSize);
+	file.seekg(0);
+	file.read(buffer.data(), fileSize);
+	file.close();
+	return;
+}
 void NewSpaceLine() {
 	std::cout << "\n===========================================================================\n";
 }
@@ -45,7 +58,44 @@ private:
 	VkFormat swapChainFormat;
 	VkExtent2D swapChainExtent;
 	std::vector<VkImageView> swapChainImageViews;
+#pragma region InitializeWindow
+	void initWindow() {
+		if (!glfwInit()) {
+			throw std::runtime_error("Failed to initialize GLFW");
+		}
+		if (!glfwVulkanSupported()) {
+			std::cout << "GLFW info: Vulkan dont  supported!" << std::endl;
+		}
+		else {
+			std::cout << "GLFW info: Vulkan supported." << std::endl;
+		}
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+		window = glfwCreateWindow(WIDTH, HEIGHT, "I NEVER ASKED FOR THIS", nullptr, nullptr);
+	}
 #pragma endregion
+#pragma region Main
+	void initVulkan() {
+		createInstance();
+		createSurface();
+		pickPhysicalDevice();
+		createLogicalDevice();
+		createSwapChain();
+		createImageViews();
+	}
+	void mainLoop() {
+		while (!glfwWindowShouldClose(window)) {
+			glfwWaitEvents();
+		}
+	}
+	void cleanup() {
+		vkDestroyDevice(device, nullptr);
+		vkDestroySurfaceKHR(vkInstance, surface, nullptr);
+		vkDestroyInstance(vkInstance, nullptr);
+		glfwDestroyWindow(window);
+		glfwTerminate();
+	}
+#pragma endregion 
 #pragma region SwapChain
 	struct SwapChainSupportDetails {
 		VkSurfaceCapabilitiesKHR capabilities;
@@ -185,43 +235,6 @@ private:
 		}
 	}
 #pragma endregion
-#pragma region InitializeWindow
-	void initWindow() {
-		if (!glfwInit()) {
-			throw std::runtime_error("Failed to initialize GLFW");
-		}
-		if (!glfwVulkanSupported()) {
-			std::cout << "GLFW info: Vulkan dont  supported!" << std::endl;
-		}
-		else {
-			std::cout << "GLFW info: Vulkan supported." << std::endl;
-		}
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-		window = glfwCreateWindow(WIDTH, HEIGHT, "I NEVER ASKED FOR THIS", nullptr, nullptr);
-	}
-#pragma endregion
-
-	void initVulkan() {
-		createInstance();
-		createSurface();
-		pickPhysicalDevice();
-		createLogicalDevice();
-		createSwapChain();
-		createImageViews();
-	}
-	void mainLoop() {
-		while (!glfwWindowShouldClose(window)) {
-			glfwWaitEvents();
-		}
-	}
-	void cleanup() {
-		vkDestroyDevice(device, nullptr);
-		vkDestroySurfaceKHR(vkInstance, surface, nullptr);
-		vkDestroyInstance(vkInstance, nullptr);
-		glfwDestroyWindow(window);
-		glfwTerminate();
-	}
 #pragma region VulkanLogicalDevice
 	void createLogicalDevice() {
 		QueueFamilyIndices index = findQueueFamilies(physicalDevice);
@@ -414,6 +427,21 @@ private:
 			std::cout << glfwExtension << '\n';
 		}
 		NewSpaceLine();
+	}
+#pragma endregion
+#pragma region Shaders
+	VkShaderModule createShaderModule(const std::vector<char>& code) {
+		VkShaderModuleCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+		createInfo.codeSize = code.size();
+		createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+		VkShaderModule shaderModule;
+		if (!vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule));
+		{
+			throw std::runtime_error("couldn't create shader module!");
+		}
+		return shaderModule;
 	}
 #pragma endregion
 };
