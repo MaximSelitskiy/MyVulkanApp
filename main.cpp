@@ -444,6 +444,32 @@ private:
 		return shaderModule;
 	}
 #pragma endregion
+#pragma region GraphicsPipeline
+	void createGraphicsPipeline() {
+		auto vertexShader = readFile("shaders/vert.spv");
+		auto fragShader = readFile("shaders/frag.spv");
+
+		VkShaderModule vertShaderModule = createShaderModule(vertexShader);
+		VkShaderModule fragShaderModule = createShaderModule(fragShader);
+
+		VkPipelineShaderStageCreateInfo vertPipelineShaderStageInfo = {};
+		vertPipelineShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		vertPipelineShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		vertPipelineShaderStageInfo.module = vertShaderModule;
+		vertPipelineShaderStageInfo.pName = "main";
+
+		VkPipelineShaderStageCreateInfo fragPipelineShaderStageInfo = {};
+		fragPipelineShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		fragPipelineShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		fragPipelineShaderStageInfo.module = fragShaderModule;
+		fragPipelineShaderStageInfo.pName = "main";
+
+		VkPipelineShaderStageCreateInfo shaderStages[] = { vertPipelineShaderStageInfo,fragPipelineShaderStageInfo };
+
+		vkDestroyShaderModule(device, fragShaderModule, nullptr);
+		vkDestroyShaderModule(device, vertShaderModule, nullptr);
+	}
+#pragma emdregion
 };
 int main() {
 	FirstApplication app;
