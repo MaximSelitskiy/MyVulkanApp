@@ -21,7 +21,7 @@ static std::vector<char> readFile(const std::string& filename) {
 	file.seekg(0);
 	file.read(buffer.data(), fileSize);
 	file.close();
-	return;
+	return buffer;
 }
 void NewSpaceLine() {
 	std::cout << "\n===========================================================================\n";
@@ -58,6 +58,7 @@ private:
 	VkFormat swapChainFormat;
 	VkExtent2D swapChainExtent;
 	std::vector<VkImageView> swapChainImageViews;
+	VkPipelineLayout pipelineLayout;
 #pragma region InitializeWindow
 	void initWindow() {
 		if (!glfwInit()) {
@@ -70,7 +71,7 @@ private:
 			std::cout << "GLFW info: Vulkan supported." << std::endl;
 		}
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 		window = glfwCreateWindow(WIDTH, HEIGHT, "I NEVER ASKED FOR THIS", nullptr, nullptr);
 	}
 #pragma endregion
@@ -92,6 +93,8 @@ private:
 		vkDestroyDevice(device, nullptr);
 		vkDestroySurfaceKHR(vkInstance, surface, nullptr);
 		vkDestroyInstance(vkInstance, nullptr);
+		vkDestroyPipelineLayout(device,pipelineLayout,nullptr);
+		//vkDestroyPipeline(device,gra);
 		glfwDestroyWindow(window);
 		glfwTerminate();
 	}
@@ -468,13 +471,73 @@ private:
 
 		VkPipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo{};
 		pipelineVertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		pipelineVertexInputStateCreateInfo.pVertexAttributeDescriptions = 0;
-		pipelineVertexInputStateCreateInfo.pVertexBindingDescriptions = 0;
+		pipelineVertexInputStateCreateInfo.pVertexAttributeDescriptions = 0;//НЕОБЯЗАТЕЛЬНО
+		pipelineVertexInputStateCreateInfo.vertexAttributeDescriptionCount = 0.0f;//КОЛИЧЕСТВО ОПИСАНИЙ АТРИБУТОВ
+		pipelineVertexInputStateCreateInfo.pVertexBindingDescriptions = 0;//НЕОБЯЗАТЕЛЬНО
+		pipelineVertexInputStateCreateInfo.vertexBindingDescriptionCount = 0.0f;//КОЛИЧЕСТВО ПРИВЯЗОК
 
 		VkPipelineInputAssemblyStateCreateInfo pipelineInputAssemblyStateCreateInfo{};
 		pipelineInputAssemblyStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 		pipelineInputAssemblyStateCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		pipelineInputAssemblyStateCreateInfo.primitiveRestartEnable = VK_FALSE;
+
+		VkPipelineViewportStateCreateInfo pipelineViewportStateCreateInfo{};
+		pipelineViewportStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+		pipelineViewportStateCreateInfo.viewportCount = 1;
+		pipelineViewportStateCreateInfo.scissorCount = 1;
+
+		VkPipelineRasterizationStateCreateInfo pipelineRasterizationStateCreateInfo{};
+		pipelineRasterizationStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		pipelineRasterizationStateCreateInfo.depthClampEnable = VK_FALSE;
+		pipelineRasterizationStateCreateInfo.rasterizerDiscardEnable = VK_FALSE;
+		pipelineRasterizationStateCreateInfo.polygonMode = VK_POLYGON_MODE_FILL;
+		pipelineRasterizationStateCreateInfo.depthBiasEnable = VK_FALSE;//НЕОБЯЗАТЕЛЬНО
+		pipelineRasterizationStateCreateInfo.depthBiasClamp = VK_FALSE;//НЕОБЯЗАТЕЛЬНО
+		pipelineRasterizationStateCreateInfo.depthBiasConstantFactor = VK_FALSE;//НЕОБЯЗАТЕЛЬНО
+		pipelineRasterizationStateCreateInfo.lineWidth = 1.0f;
+		pipelineRasterizationStateCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+		pipelineRasterizationStateCreateInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+
+		VkPipelineMultisampleStateCreateInfo pipelineMultisampStateCretaeInfo{};
+		pipelineMultisampStateCretaeInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		pipelineMultisampStateCretaeInfo.sampleShadingEnable = VK_FALSE;
+		pipelineMultisampStateCretaeInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+		pipelineMultisampStateCretaeInfo.minSampleShading = 1.0f;//НЕОБЯЗАТЕЛЬНО
+		pipelineMultisampStateCretaeInfo.pSampleMask = nullptr;//НЕОБЯЗАТЕЛЬНО
+		pipelineMultisampStateCretaeInfo.alphaToCoverageEnable = VK_FALSE;//НЕОБЯЗАТЕЛЬНО
+		pipelineMultisampStateCretaeInfo.alphaToOneEnable = VK_FALSE;//НЕОБЯЗАТЕЛЬНО
+
+		VkPipelineColorBlendAttachmentState pipelineColorBlendAttachmentState{};
+		pipelineColorBlendAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		pipelineColorBlendAttachmentState.blendEnable = VK_TRUE;
+		pipelineColorBlendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+		pipelineColorBlendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+		pipelineColorBlendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+		pipelineColorBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+		pipelineColorBlendAttachmentState.colorBlendOp = VK_BLEND_OP_ADD;
+		pipelineColorBlendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD;
+
+		VkPipelineColorBlendStateCreateInfo pipelineColorBlendStateCreateInfo{};
+		pipelineColorBlendStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+		pipelineColorBlendStateCreateInfo.logicOpEnable = VK_FALSE;
+		pipelineColorBlendStateCreateInfo.logicOp = VK_LOGIC_OP_COPY;//НЕОБЯЗАТЕЛЬНО
+		pipelineColorBlendStateCreateInfo.attachmentCount = 1;
+		pipelineColorBlendStateCreateInfo.pAttachments = &pipelineColorBlendAttachmentState;
+		pipelineColorBlendStateCreateInfo.blendConstants[0] = 0.0f;//НЕОБЯЗАТЕЛЬНО
+		pipelineColorBlendStateCreateInfo.blendConstants[1] = 0.0f;//НЕОБЯЗАТЕЛЬНО
+		pipelineColorBlendStateCreateInfo.blendConstants[2] = 0.0f;//НЕОБЯЗАТЕЛЬНО
+		pipelineColorBlendStateCreateInfo.blendConstants[3] = 0.0f;//НЕОБЯЗАТЕЛЬНО
+
+		VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
+		pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutCreateInfo.setLayoutCount = 0;
+		pipelineLayoutCreateInfo.setLayoutCount = 0;//НЕОБЯЗАТЕЛЬНО 
+		pipelineLayoutCreateInfo.pSetLayouts = nullptr;//НЕОБЯЗАТЕЛЬНО
+		pipelineLayoutCreateInfo.pushConstantRangeCount = 0;//НЕОБЯЗАТЕЛЬНО
+		pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;//НЕОБЯЗАТЕЛЬНО
+		if (vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+			throw std::runtime_error("couldn't create pipeline layout");
+		}
 
 		VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo{};
 		graphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -482,13 +545,23 @@ private:
 		graphicsPipelineCreateInfo.pStages = shaderStages;
 		graphicsPipelineCreateInfo.pVertexInputState = &pipelineVertexInputStateCreateInfo;
 		graphicsPipelineCreateInfo.pInputAssemblyState = &pipelineInputAssemblyStateCreateInfo;
-	
-
+		graphicsPipelineCreateInfo.pViewportState = &pipelineViewportStateCreateInfo;
+		graphicsPipelineCreateInfo.pRasterizationState = &pipelineRasterizationStateCreateInfo;
+		graphicsPipelineCreateInfo.pMultisampleState = & pipelineMultisampStateCretaeInfo;
+		graphicsPipelineCreateInfo.pColorBlendState = &pipelineColorBlendStateCreateInfo;
+		graphicsPipelineCreateInfo.pDepthStencilState = nullptr;//НЕОБЯЗАТЕЛЬНО
+		graphicsPipelineCreateInfo.layout = pipelineLayout;
 
 		vkDestroyShaderModule(device, fragShaderModule, nullptr);
 		vkDestroyShaderModule(device, vertShaderModule, nullptr);
 	}
-#pragma emdregion
+#pragma endregion
+#pragma region RenderPass
+	void createRenderPass()
+	{
+
+	}
+#pragma endregion
 };
 int main() {
 	FirstApplication app;
