@@ -104,6 +104,7 @@ private:
 		}
 		vkDestroyDevice(device, nullptr);
 		vkDestroyInstance(vkInstance, nullptr);
+
 		glfwDestroyWindow(window);
 		glfwTerminate();
 	}
