@@ -9,8 +9,10 @@
 #include <limits>
 #include <cstdint>
 #include <set>
-const uint32_t WIDTH = 350;
-const uint32_t HEIGHT = 250;
+#include <glm/glm.hpp>
+#include <array>
+const uint32_t WIDTH = 800;
+const uint32_t HEIGHT = 600;
 static std::vector<char> readFile(const std::string& filename) {
 	std::ifstream file(filename, std::ios::ate | std::ios::binary);
 	if (!file.is_open()) {
@@ -62,6 +64,13 @@ private:
 	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 	VkPipeline graphicsPipeline = VK_NULL_HANDLE;
 	VkRenderPass renderPass = VK_NULL_HANDLE;
+	VkCommandPool commandPool = VK_NULL_HANDLE;
+	VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+	VkSemaphore imageAvailableSemaphore;
+	VkSemaphore renderFinishedSemaphore;
+	VkFence fence;
+	VkBuffer vertexBuffer;
+	VkDeviceMemory vertexBufferMemory;
 #pragma region InitializeWindow
 	void initWindow() {
 		if (!glfwInit()) {
@@ -88,25 +97,100 @@ private:
 		createImageViews();
 		createRenderPass();
 		createGraphicsPipeline();
+		createFrameBuffers();
+		createCommandPool();
+		createVertexBuffer();
+		createCommandBuffer();
+		createSyncObjects();
 	}
 	void mainLoop() {
 		while (!glfwWindowShouldClose(window)) {
-			glfwWaitEvents();
+
+			glfwPollEvents();
+			drawFrame();
 		}
+		vkDeviceWaitIdle(device);
 	}
 	void cleanup() {
-		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-		vkDestroySurfaceKHR(vkInstance, surface, nullptr);
-		vkDestroyRenderPass(device, renderPass, nullptr);
-		vkDestroyPipeline(device, graphicsPipeline, nullptr);
+		vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
+		vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
+		vkDestroyFence(device, fence, nullptr);
+		vkDestroyCommandPool(device, commandPool, nullptr);
 		for (auto framebuffer : swapChainFramebuffers) {
 			vkDestroyFramebuffer(device, framebuffer, nullptr);
 		}
+		vkDestroyPipeline(device, graphicsPipeline, nullptr);
+		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+		vkDestroySurfaceKHR(vkInstance, surface, nullptr);
+		vkDestroyRenderPass(device, renderPass, nullptr);
+		for (auto imageView : swapChainImageViews) {
+			vkDestroyImageView(device, imageView, nullptr);
+		}
+		vkDestroySwapchainKHR(device, swapChain, nullptr);
+		vkDestroyBuffer(device, vertexBuffer, nullptr);
+		vkFreeMemory(device, vertexBufferMemory, nullptr);
 		vkDestroyDevice(device, nullptr);
 		vkDestroyInstance(vkInstance, nullptr);
 
 		glfwDestroyWindow(window);
 		glfwTerminate();
+	}
+#pragma endregion 
+#pragma region DrawFrame
+	void drawFrame() {
+		// ожидаем получения сигнала от барьера
+		vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+		// сбрасываем барьер в несигнальное состояние
+		vkResetFences(device, 1, &fence);
+
+		// получаем индекс текущего изображения из цепочки буферов
+		uint32_t imageIndex;
+		vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+		vkResetCommandBuffer(commandBuffer, 0);  // сбрасываем буфер команд
+		recordCommandBuffer(commandBuffer, imageIndex);  // записываем команды в буфер
+
+		// определяем информацию для отправки буфера команд в очередь
+		VkSubmitInfo submitInfo{};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+		VkSemaphore waitSemaphores[] = { imageAvailableSemaphore };  // ожидаем один семафор
+		submitInfo.waitSemaphoreCount = 1; // ожидаем один семафор
+		submitInfo.pWaitSemaphores = waitSemaphores;
+		// этапы конвейера
+		// VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT - этап получения окончательного цвета
+		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+		submitInfo.pWaitDstStageMask = waitStages;
+
+		// устанавливаем выполняемые команды
+		submitInfo.commandBufferCount = 1;   // один буфер команд
+		submitInfo.pCommandBuffers = &commandBuffer;  // выполняемый буфер команд
+
+		// устанавливаем, какие семафоры следует сигнализировать после завершения выполнения буфера команд
+		// renderFinishedSemaphore будет сигнализировать о том, что команды завершили выполнение
+		VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };
+		submitInfo.signalSemaphoreCount = 1;
+		submitInfo.pSignalSemaphores = signalSemaphores;
+
+		// отправляем буфер команд в графическую очередь
+		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, fence) != VK_SUCCESS) {
+			throw std::runtime_error("Не удалось отправить буфер команд!");
+		}
+
+		VkPresentInfoKHR presentInfo{};
+		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+		// указываем, какие семафоры ждать, прежде чем может произойти отображение
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores = signalSemaphores;
+
+		VkSwapchainKHR swapChains[] = { swapChain };  // цепочки кадров с изображениями для отображения
+		presentInfo.swapchainCount = 1;   // одна цепочка кадров
+		presentInfo.pSwapchains = swapChains;   // цепочки кадров, из которых показываем изображения
+		presentInfo.pImageIndices = &imageIndex; // индекс изображения
+
+		// отправляем запрос на показ изображения
+		vkQueuePresentKHR(presentQueue, &presentInfo);
 	}
 #pragma endregion 
 #pragma region SwapChain
@@ -185,7 +269,7 @@ private:
 		VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
 		VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 		uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-		if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount < swapChainSupport.capabilities.maxImageCount) {
+		if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
 			imageCount = swapChainSupport.capabilities.maxImageCount;
 		}
 		VkSwapchainCreateInfoKHR createInfo{};
@@ -226,7 +310,7 @@ private:
 		swapChainImageViews.resize((swapChainImages.size()));
 		for (int i = 0; i < swapChainImages.size(); i++) {
 			VkImageViewCreateInfo createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 			createInfo.image = swapChainImages[i];
 			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 			createInfo.format = swapChainFormat;
@@ -238,7 +322,7 @@ private:
 
 			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			createInfo.subresourceRange.baseMipLevel = 0;
-			createInfo.subresourceRange.levelCount = 0;
+			createInfo.subresourceRange.levelCount = 1;
 			createInfo.subresourceRange.baseArrayLayer = 0;
 			createInfo.subresourceRange.layerCount = 1;
 
@@ -262,7 +346,7 @@ private:
 		for (uint32_t queueFamily : uniqueQueueFamilies) {
 			VkDeviceQueueCreateInfo queueCreateInfo{};
 			queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-			queueCreateInfo.queueFamilyIndex = index.graphicsFamily.value();
+			queueCreateInfo.queueFamilyIndex = queueFamily;
 			queueCreateInfo.queueCount = 1;
 			queueCreateInfo.pQueuePriorities = &queuePriority;
 			queueCreateInfos.push_back(queueCreateInfo);
@@ -481,12 +565,16 @@ private:
 
 		VkPipelineShaderStageCreateInfo shaderStages[] = { vertPipelineShaderStageInfo,fragPipelineShaderStageInfo };
 
+		auto bindingDescriptions = Vertex::getBindingDescription();
+		auto attributeDesciptions = Vertex::getAttributeDescriptions();
+
+
 		VkPipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo{};
 		pipelineVertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		pipelineVertexInputStateCreateInfo.pVertexAttributeDescriptions = 0;//НЕОБЯЗАТЕЛЬНО
-		pipelineVertexInputStateCreateInfo.vertexAttributeDescriptionCount = 0.0f;//КОЛИЧЕСТВО ОПИСАНИЙ АТРИБУТОВ
-		pipelineVertexInputStateCreateInfo.pVertexBindingDescriptions = 0;//НЕОБЯЗАТЕЛЬНО
-		pipelineVertexInputStateCreateInfo.vertexBindingDescriptionCount = 0.0f;//КОЛИЧЕСТВО ПРИВЯЗОК
+		pipelineVertexInputStateCreateInfo.pVertexAttributeDescriptions = attributeDesciptions.data();//НЕОБЯЗАТЕЛЬНО
+		pipelineVertexInputStateCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDesciptions.size());//КОЛИЧЕСТВО ОПИСАНИЙ АТРИБУТОВ
+		pipelineVertexInputStateCreateInfo.pVertexBindingDescriptions = &bindingDescriptions;//НЕОБЯЗАТЕЛЬНО
+		pipelineVertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;//КОЛИЧЕСТВО ПРИВЯЗОК
 
 		VkPipelineInputAssemblyStateCreateInfo pipelineInputAssemblyStateCreateInfo{};
 		pipelineInputAssemblyStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -530,7 +618,7 @@ private:
 
 		VkPipelineColorBlendAttachmentState pipelineColorBlendAttachmentState{};
 		pipelineColorBlendAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-		pipelineColorBlendAttachmentState.blendEnable = VK_TRUE;
+		pipelineColorBlendAttachmentState.blendEnable = VK_FALSE;//
 		pipelineColorBlendAttachmentState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
 		pipelineColorBlendAttachmentState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 		pipelineColorBlendAttachmentState.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
@@ -603,6 +691,7 @@ private:
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.pColorAttachments = &colorAttachmentRef;
+		subpass.colorAttachmentCount = 1;
 
 		VkRenderPassCreateInfo renderPassCreateInfo{};
 		renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -616,8 +705,6 @@ private:
 		}
 
 	}
-
-
 #pragma endregion
 #pragma region FrameBuffer
 	void createFrameBuffers() {
@@ -640,6 +727,182 @@ private:
 		}
 	}
 #pragma endregion
+#pragma region CommandBuffer
+	void createCommandPool() {
+		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
+
+		VkCommandPoolCreateInfo commandPoolCreateInfo{};
+		commandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		commandPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		commandPoolCreateInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+
+		if (vkCreateCommandPool(device, &commandPoolCreateInfo, nullptr, &commandPool) != VK_SUCCESS) {
+			throw std::runtime_error("couldn't create command pool");
+		}
+	}
+	void createCommandBuffer() {
+		VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
+		commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		commandBufferAllocateInfo.commandBufferCount = 1;
+		commandBufferAllocateInfo.commandPool = commandPool;
+		commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+		if (vkAllocateCommandBuffers(device, &commandBufferAllocateInfo, &commandBuffer) != VK_SUCCESS) {
+			throw std::runtime_error("couldn't create command buffers");
+		}
+	}
+	void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+		VkCommandBufferBeginInfo commandBufferBeginInfo{};
+		commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		//commandBufferBeginInfo.pInheritanceInfo = nullptr;
+		//commandBufferBeginInfo.flags = 0;
+
+		if (vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo) != VK_SUCCESS) {
+			throw std::runtime_error("couldn't begin command buffer");
+		}
+
+		VkRenderPassBeginInfo renderPassBeginInfo{};
+		renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderPassBeginInfo.framebuffer = swapChainFramebuffers[imageIndex];
+		renderPassBeginInfo.renderPass = renderPass;
+		renderPassBeginInfo.clearValueCount = 1;
+		renderPassBeginInfo.renderArea.offset = { 0,0 };
+		renderPassBeginInfo.renderArea.extent = swapChainExtent;
+
+		VkClearValue clearValue{ {{0.0f, 0.0f, 0.0f, 1.0f}} };
+		renderPassBeginInfo.clearValueCount = 1;
+		renderPassBeginInfo.pClearValues = &clearValue;
+
+		vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+		VkBuffer vertexBuffers[] = { vertexBuffer };
+		VkDeviceSize offsets[] = { 0 };
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.height = static_cast<float>(swapChainExtent.height);
+		viewport.width = static_cast<float>(swapChainExtent.width);
+		viewport.maxDepth = 1.0f;
+		viewport.minDepth = 0.0f;
+		vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+		VkRect2D scissors{};
+		scissors.offset = { 0,0 };
+		scissors.extent = swapChainExtent;
+		vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
+
+		vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+
+		vkCmdEndRenderPass(commandBuffer);
+		if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+			throw std::runtime_error("couldn't record command buffer");
+		}
+
+	}
+#pragma endregion
+#pragma region VertexBuffer
+	struct Vertex {
+		glm::vec2 pos;
+		glm::vec3 color;
+
+		static VkVertexInputBindingDescription getBindingDescription() {
+			VkVertexInputBindingDescription bindingDescription{};
+			bindingDescription.binding = 0;
+			bindingDescription.stride = sizeof(Vertex);
+			bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+			return bindingDescription;
+		}
+		static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
+			std::array<VkVertexInputAttributeDescription, 2> attributeDescription{};
+			attributeDescription[0].binding = 0;
+			attributeDescription[0].location = 0;
+			attributeDescription[0].format = VK_FORMAT_R32G32_SFLOAT;
+			attributeDescription[0].offset = offsetof(Vertex, pos);
+
+			attributeDescription[1].binding = 0;
+			attributeDescription[1].location = 1;
+			attributeDescription[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+			attributeDescription[1].offset = offsetof(Vertex, color);
+
+			return attributeDescription;
+		}
+	};
+	const std::vector<Vertex> vertices = {
+	{{-0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
+	{{0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}},
+	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+
+	{{0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}},
+	{{-0.5f, 0.5f}, {1.0f, 0.0f, 1.0f}},
+	{{-0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}},
+
+	};
+	void createVertexBuffer() {
+		VkBufferCreateInfo bufferInfo{};
+		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		bufferInfo.size = sizeof(vertices[0]) * vertices.size();
+		bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		if (vkCreateBuffer(device, &bufferInfo, nullptr, &vertexBuffer) != VK_SUCCESS) {
+			throw std::runtime_error("Couldn't create vertex buffer");
+		}
+
+		VkMemoryRequirements memoryRequirements{};
+		vkGetBufferMemoryRequirements(device, vertexBuffer, &memoryRequirements);
+
+		VkMemoryAllocateInfo memoryAllocateinfo{};
+		memoryAllocateinfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		memoryAllocateinfo.allocationSize = memoryRequirements.size;
+		memoryAllocateinfo.memoryTypeIndex = findMemoryType(memoryRequirements.memoryTypeBits,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		if (vkAllocateMemory(device, &memoryAllocateinfo, nullptr, &vertexBufferMemory) != VK_SUCCESS) {
+			throw std::runtime_error("Couldn't allocate memory for vertex buffer");
+		}
+		vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
+
+		void* data;
+		vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data);
+		memcpy(data, vertices.data(), (size_t)bufferInfo.size);
+		vkUnmapMemory(device, vertexBufferMemory);
+	}
+	void createBuffer(VkDeviceSize size,VkBufferUsageFlags usage,VkMemoryPropertyFlags properties,VkBuffer &buffer,VkDeviceMemory& bufferMemory) {
+
+	}
+	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+		VkPhysicalDeviceMemoryProperties memoryProperties{};
+		vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memoryProperties);
+		for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
+			if ((typeFilter & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+				return i;
+			}
+		}
+
+		throw std::runtime_error("failed to find suitable memory type!");
+	}
+#pragma endregion
+#pragma region Synchronisation
+	void createSyncObjects() {
+		VkSemaphoreCreateInfo semaphoreCreateInfo{};
+		semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+		VkFenceCreateInfo fenceCreateInfo{};
+		fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+		if ((vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS) ||
+			(vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS) ||
+			(vkCreateFence(device, &fenceCreateInfo, nullptr, &fence) != VK_SUCCESS)) {
+			throw std::runtime_error("couldn't create semaphore or fence");
+		}
+	}
+#pragma endregion
+
 };
 int main() {
 	FirstApplication app;
