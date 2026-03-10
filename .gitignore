@@ -363,3 +363,6 @@ MigrationBackup/
 FodyWeavers.xsd
 VulkanApp/
 x64/
+VulkanApp.sln
+VulkanApp.vcxproj
+VulkanApp.vcxproj.filters
