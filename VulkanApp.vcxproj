@@ -129,13 +129,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Extensions.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="numberOfExtensions.cpp" />
-    <ClCompile Include="PhysicalDevices.cpp" />
     <ClCompile Include="testMain.cpp" />
-    <ClCompile Include="VkApplicationInfo.cpp" />
-    <ClCompile Include="VkInstamce.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

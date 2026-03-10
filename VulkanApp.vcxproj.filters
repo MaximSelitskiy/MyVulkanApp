@@ -21,21 +21,6 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VkInstamce.cpp">
-      <Filter>Examples</Filter>
-    </ClCompile>
-    <ClCompile Include="numberOfExtensions.cpp">
-      <Filter>Examples</Filter>
-    </ClCompile>
-    <ClCompile Include="VkApplicationInfo.cpp">
-      <Filter>Examples</Filter>
-    </ClCompile>
-    <ClCompile Include="Extensions.cpp">
-      <Filter>Examples</Filter>
-    </ClCompile>
-    <ClCompile Include="PhysicalDevices.cpp">
-      <Filter>Examples</Filter>
-    </ClCompile>
     <ClCompile Include="testMain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
