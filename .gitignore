@@ -361,5 +361,10 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+#MY IGNORES
 VulkanApp/
 x64/
+*.sln
+*.vcxproj
+*.vcxproj.filters
