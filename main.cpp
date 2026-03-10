@@ -71,6 +71,8 @@ private:
 	VkFence fence;
 	VkBuffer vertexBuffer;
 	VkDeviceMemory vertexBufferMemory;
+	VkBuffer indexBuffer;
+	VkDeviceMemory indexBufferMemory;
 #pragma region InitializeWindow
 	void initWindow() {
 		if (!glfwInit()) {
@@ -100,6 +102,7 @@ private:
 		createFrameBuffers();
 		createCommandPool();
 		createVertexBuffer();
+		createIndexBuffer();
 		createCommandBuffer();
 		createSyncObjects();
 	}
@@ -127,8 +130,12 @@ private:
 			vkDestroyImageView(device, imageView, nullptr);
 		}
 		vkDestroySwapchainKHR(device, swapChain, nullptr);
+
+		vkDestroyBuffer(device, indexBuffer, nullptr);
+		vkFreeMemory(device, indexBufferMemory, nullptr);
 		vkDestroyBuffer(device, vertexBuffer, nullptr);
 		vkFreeMemory(device, vertexBufferMemory, nullptr);
+
 		vkDestroyDevice(device, nullptr);
 		vkDestroyInstance(vkInstance, nullptr);
 
@@ -781,6 +788,8 @@ private:
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
+		vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
 		VkViewport viewport{};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
@@ -795,8 +804,7 @@ private:
 		scissors.extent = swapChainExtent;
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissors);
 
-		vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
-
+		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 		vkCmdEndRenderPass(commandBuffer);
 		if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
 			throw std::runtime_error("couldn't record command buffer");
@@ -835,11 +843,8 @@ private:
 	{{-0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
 	{{0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}},
 	{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-
-	{{0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}},
-	{{-0.5f, 0.5f}, {1.0f, 0.0f, 1.0f}},
-	{{-0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}},
-
+	{{-0.5f, 0.5f}, {1.0f, 1.0f, 0.0f}},
+	{{-0.9f, 0.9f}, {1.0f, 1.0f, 0.0f}}
 	};
 	void createVertexBuffer() {
 		VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
@@ -864,7 +869,7 @@ private:
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			vertexBuffer,
 			vertexBufferMemory);
-		
+
 		copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vkFreeMemory(device, stagingBufferMemory, nullptr);
@@ -922,7 +927,7 @@ private:
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &commandBuffer;
 
-		vkQueueSubmit(graphicsQueue, 1, &submitInfo,VK_NULL_HANDLE);
+		vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
 		vkQueueWaitIdle(graphicsQueue);
 		vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 	}
@@ -938,6 +943,39 @@ private:
 		throw std::runtime_error("failed to find suitable memory type!");
 	}
 #pragma endregion
+#pragma region IndexBuffer
+	const std::vector<uint16_t> indices{
+		0,1,2,2,3,0
+	};
+	void createIndexBuffer() {
+		VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+		VkBuffer stagingBuffer;
+		VkDeviceMemory stagingBufferMemory;
+		createBuffer(bufferSize,
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			stagingBuffer,
+			stagingBufferMemory);
+
+		void* data;
+		vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+		memcpy(data, indices.data(), static_cast<size_t>(bufferSize));
+		vkUnmapMemory(device, stagingBufferMemory);
+
+		createBuffer(bufferSize,
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+			VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			indexBuffer,
+			indexBufferMemory);
+		copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+		vkDestroyBuffer(device, stagingBuffer, nullptr);
+		vkFreeMemory(device, stagingBufferMemory, nullptr);
+	}
+#pragma endregion
+
 #pragma region Synchronisation
 	void createSyncObjects() {
 		VkSemaphoreCreateInfo semaphoreCreateInfo{};
